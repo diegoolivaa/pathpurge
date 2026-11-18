@@ -26,7 +26,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Check and audit the $PATH variable for issues
     Check,
 }
 
@@ -47,13 +46,24 @@ fn main() {
 }
 
 fn prompt_action(path_str: &str, issue_type: &str) -> String {
-    print!("[{}] {} --> Action [k]eep / [d]elete? : ", issue_type, path_str);
+    print!("[{}] {} --> Action [K]eep / [d]elete? : ", issue_type, path_str);
     io::stdout().flush().unwrap();
 
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     
     input.trim().to_lowercase()
+}
+
+fn normalize_path(path: &std::path::Path) -> String {
+    #[cfg(windows)]
+    {
+        path.to_string_lossy().to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_string_lossy().into_owned()
+    }
 }
 
 fn run_audit() {
@@ -75,7 +85,7 @@ fn run_audit() {
     for path in path {
         if path.exists() {
             if path.is_dir() {
-                if seen.insert(path.clone()) {
+                if seen.insert(normalize_path(&path)) {
                     println!("[OK] --> {}", path.display());
                     valid += 1;
                     cleaned_paths.push(path);
@@ -121,7 +131,17 @@ fn run_audit() {
     
     if let Ok(new_path_string) = env::join_paths(cleaned_paths) {
         println!();
-        println!(">> Suggested clean PATH export:");
-        println!("export PATH=\"{}\"", new_path_string.to_string_lossy());
+        println!(">> Suggested clean PATH:");
+
+        #[cfg(windows)]
+        {
+            println!("PowerShell: $env:Path = \"{}\"", new_path_string.to_string_lossy());
+            println!("CMD:        set PATH={}", new_path_string.to_string_lossy());
+        }
+
+        #[cfg(not(windows))]
+        {
+            println!("export PATH=\"{}\"", new_path_string.to_string_lossy());
+        }
     }
 }
